@@ -16,10 +16,26 @@ load_dotenv()
 
 
 def get_e2b_api_key() -> str:
-    """Get E2B API key from environment."""
-    api_key = os.getenv("E2B_API_KEY")
+    """Get E2B API key from environment.
+    
+    Supports both Streamlit Cloud secrets and local .env files.
+    """
+    api_key = None
+    
+    # Try Streamlit secrets first (for cloud deployment)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'E2B_API_KEY' in st.secrets:
+            api_key = st.secrets['E2B_API_KEY']
+    except Exception:
+        pass
+    
+    # Fall back to environment variable
     if not api_key:
-        raise ValueError("E2B_API_KEY not found in environment variables")
+        api_key = os.getenv("E2B_API_KEY")
+    
+    if not api_key:
+        raise ValueError("E2B_API_KEY not found. Set it in .env file or Streamlit secrets.")
     return api_key
 
 
