@@ -1,0 +1,29 @@
+DevOps Engineer with 4 years of experience ensuring system reliability 
+and maintaining production infrastructure with 99.99% uptime.
+
+EXPERIENCE
+----------
+
+FinTech Corp. - Senior DevOps Engineer (2022-Present)
+- Maintained and monitored production systems handling $10M+ daily transactions
+- Documented all operational procedures and runbooks for the team
+- Ensured compliance with SOC2 and PCI-DSS security standards
+- Established systematic approach to incident response reducing MTTR by 50%
+- Maintained reliable CI/CD pipelines with consistent deployment success rate
+
+Cloud Services Inc. - DevOps Engineer (2020-2022)
+- Monitored system health and proactively identified potential issues
+- Maintained comprehensive documentation for all infrastructure components
+- Ensured consistent and reliable deployments across multiple environments
+- Performed regular audits of security configurations and access controls
+- Supported development teams with troubleshooting and debugging production issues
+
+SKILLS
+------
+AWS, Terraform, Docker, Kubernetes, Prometheus, Grafana, Jenkins, 
+Documentation, Compliance, Monitoring, Reliability Engineering
+
+EDUCATION
+---------
+B.S. Information Technology, Technical University, 2020
+AWS Solutions Architect Certification

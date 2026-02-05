@@ -1,0 +1,28 @@
+Senior Software Engineer with 5 years of experience in building scalable 
+backend systems and APIs. Led a team of 4 engineers to architect and develop 
+a microservices platform that handles 10M+ daily transactions.
+
+EXPERIENCE
+----------
+
+Tech Company Inc. - Senior Software Engineer (2021-Present)
+- Designed and implemented a real-time data processing pipeline using Kafka and Spark
+- Collaborated with cross-functional teams including product, design, and data science
+- Mentored 3 junior developers and established coding standards and best practices
+- Spearheaded the migration to cloud infrastructure, reducing costs by 40%
+- Architected a scalable API gateway handling 50K requests per second
+
+Startup Co. - Software Engineer (2019-2021)
+- Built REST APIs serving 1M+ daily requests with 99.9% uptime
+- Maintained comprehensive documentation for all system components
+- Worked in fast-paced agile environment, consistently meeting tight deadlines
+- Proactively identified and resolved production issues
+- Developed innovative caching solutions reducing database load by 60%
+
+SKILLS
+------
+Python, Go, AWS, Kubernetes, PostgreSQL, Redis, Kafka, Docker, System Design
+
+EDUCATION
+---------
+B.S. Computer Science, State University, 2019
