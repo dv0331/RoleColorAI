@@ -22,7 +22,7 @@ import shutil
 from io import BytesIO
 
 # Document parsing imports
-import PyPDF2
+from pypdf import PdfReader
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -109,7 +109,7 @@ if 'tailored_word' not in st.session_state:
 def extract_text_from_pdf(pdf_file) -> str:
     """Extract text from a PDF file."""
     try:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        pdf_reader = PdfReader(pdf_file)
         text_parts = []
         for page in pdf_reader.pages:
             page_text = page.extract_text()

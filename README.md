@@ -1,7 +1,20 @@
+---
+title: RoleColorAI
+emoji: 🎨
+colorFrom: blue
+colorTo: purple
+sdk: streamlit
+sdk_version: "1.40.0"
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # RoleColorAI - Resume Intelligence System
 
 An AI-powered resume intelligence system that analyzes and rewrites resumes through a **team-role lens** rather than generic job titles.
 
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://rolecolorai.streamlit.app)
 
 ## 🎯 Overview
@@ -285,9 +298,36 @@ Supportee: [████░░░░░░░░░░░░░░░░░░�
 
 ## 🚀 Deployment
 
-### Deploy to Streamlit Cloud (Recommended)
+### Deploy to Hugging Face Spaces (Recommended)
 
-1. Push your code to GitHub (already done!)
+Hugging Face Spaces offers free hosting with native Streamlit support:
+
+1. Go to [huggingface.co/spaces](https://huggingface.co/spaces)
+2. Click **"Create new Space"**
+3. Fill in:
+   - **Space name**: `RoleColorAI`
+   - **License**: MIT
+   - **SDK**: Streamlit
+   - **Space hardware**: CPU basic (free)
+4. Clone the Space repository locally:
+   ```bash
+   git clone https://huggingface.co/spaces/YOUR_USERNAME/RoleColorAI
+   cd RoleColorAI
+   ```
+5. Copy your project files into the Space directory
+6. Add your secrets in the Space settings:
+   - Go to **Settings** → **Repository secrets**
+   - Add `OPENAI_API_KEY` and `E2B_API_KEY`
+7. Push to deploy:
+   ```bash
+   git add . && git commit -m "Initial deployment" && git push
+   ```
+
+Your app will be live at `https://huggingface.co/spaces/YOUR_USERNAME/RoleColorAI`
+
+### Deploy to Streamlit Cloud
+
+1. Push your code to GitHub
 2. Go to [share.streamlit.io](https://share.streamlit.io/)
 3. Sign in with GitHub
 4. Click "New app"
