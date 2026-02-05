@@ -1,14 +1,14 @@
 # Core dependencies
 python-dotenv==1.0.0
 openai>=1.50.0
-streamlit==1.31.0
+streamlit>=1.40.0
 
 # NLP libraries
 spacy==3.7.4
 nltk==3.8.1
 
-# E2B Sandbox
-e2b==0.17.1
+# E2B Sandbox (v2.x for latest features)
+e2b>=2.0.0
 
 # Document parsing (PDF and Word)
 PyPDF2==3.0.1
