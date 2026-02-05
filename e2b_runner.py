@@ -44,17 +44,36 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
         return {
             "success": False,
             "error": "E2B package not installed. Run: pip install e2b",
-            "log": ""
+            "log": "",
+            "pdf_data": None
         }
     
-    api_key = get_e2b_api_key()
+    # Validate API key format
+    try:
+        api_key = get_e2b_api_key()
+        if not api_key.startswith("e2b_"):
+            return {
+                "success": False,
+                "error": f"E2B API key appears invalid. Keys should start with 'e2b_'. Got: {api_key[:10]}...",
+                "log": "",
+                "pdf_data": None
+            }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "log": "",
+            "pdf_data": None
+        }
+    
     sandbox = None
     
     try:
         # Create sandbox using E2B SDK v2.x class method
         # Sandbox.create() is the recommended way in v2.x
-        # If template is not specified, it defaults to 'base'
+        print(f"[E2B Debug] Creating sandbox with API key: {api_key[:10]}...")
         sandbox = Sandbox.create(api_key=api_key, timeout=300)
+        print(f"[E2B Debug] Sandbox created successfully")
         
         # Write LaTeX file
         tex_path = f"/home/user/{filename}.tex"
@@ -101,24 +120,37 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
             
     except Exception as e:
         error_msg = str(e)
-        original_error = error_msg  # Keep original for debugging
+        error_type = type(e).__name__
+        original_error = f"[{error_type}] {error_msg}"  # Keep original with type for debugging
+        
+        print(f"[E2B Debug] Exception caught: {original_error}")
+        
+        # Check exception type and message for more specific errors
+        error_lower = error_msg.lower()
         
         # Provide more helpful error messages for common issues
-        if "WebSocket" in error_msg or "connection" in error_msg.lower():
-            error_msg = f"Connection error: {original_error}. This may be a temporary E2B service issue. Please try again in a moment."
-        elif "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower() or "401" in error_msg:
-            error_msg = f"API key error: Please verify your E2B_API_KEY is correct and active. (Details: {original_error})"
-        elif "404" in error_msg or "not found" in error_msg.lower():
-            error_msg = f"Template not found. The 'base' template may not be available. (Details: {original_error})"
-        elif "template" in error_msg.lower():
+        if "WebSocket" in error_msg or "connection" in error_lower:
+            error_msg = f"Connection error: {original_error}. This may be a temporary E2B service issue. Please try again."
+        elif any(x in error_lower for x in ["api_key", "unauthorized", "authentication", "invalid key"]) or "401" in error_msg:
+            error_msg = f"API key error: Please verify your E2B_API_KEY is correct and active."
+        elif "403" in error_msg or "forbidden" in error_lower:
+            error_msg = f"Access forbidden. Your API key may not have access to this template or feature."
+        elif "404" in error_msg or "not found" in error_lower:
+            error_msg = f"Resource not found. The template may not be available."
+        elif "timeout" in error_lower:
+            error_msg = f"Operation timed out. E2B service may be slow or unavailable."
+        elif "template" in error_lower:
             error_msg = f"Template error: {original_error}"
+        elif "quota" in error_lower or "limit" in error_lower or "rate" in error_lower:
+            error_msg = f"Rate limit or quota exceeded. Please wait and try again."
         else:
             error_msg = f"E2B Error: {original_error}"
         
         return {
             "success": False,
             "error": error_msg,
-            "log": ""
+            "log": "",
+            "pdf_data": None
         }
     finally:
         # Always clean up the sandbox

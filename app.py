@@ -15,11 +15,17 @@ Features:
 
 import streamlit as st
 import base64
+import subprocess
+import tempfile
+import os
+import shutil
 from io import BytesIO
 
 # Document parsing imports
 import PyPDF2
 from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # Import modules
 from rolecolor_framework import ROLECOLOR_KEYWORDS, get_rolecolor_descriptions
@@ -84,6 +90,12 @@ if 'chat_assistant' not in st.session_state:
     st.session_state.chat_assistant = ChatAssistant()
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+if 'compiled_pdf' not in st.session_state:
+    st.session_state.compiled_pdf = None
+if 'word_doc' not in st.session_state:
+    st.session_state.word_doc = None
 
 
 def extract_text_from_pdf(pdf_file) -> str:
@@ -119,6 +131,139 @@ def extract_text_from_docx(docx_file) -> str:
     except Exception as e:
         st.error(f"Error reading Word document: {str(e)}")
         return ""
+
+
+def compile_latex_locally(latex_code: str, filename: str = "resume") -> dict:
+    """
+    Compile LaTeX to PDF using local pdflatex if available.
+    Falls back to an error message if pdflatex is not installed.
+    """
+    # Check if pdflatex is available
+    pdflatex_path = shutil.which("pdflatex")
+    
+    if not pdflatex_path:
+        return {
+            "success": False,
+            "error": "pdflatex not found. Install TeX Live or MiKTeX for local compilation, or use the E2B option.",
+            "log": "",
+            "pdf_data": None
+        }
+    
+    try:
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tex_path = os.path.join(tmpdir, f"{filename}.tex")
+            pdf_path = os.path.join(tmpdir, f"{filename}.pdf")
+            
+            # Write LaTeX file
+            with open(tex_path, "w", encoding="utf-8") as f:
+                f.write(latex_code)
+            
+            # Run pdflatex
+            result = subprocess.run(
+                [pdflatex_path, "-interaction=nonstopmode", f"{filename}.tex"],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            # Check if PDF was created
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    pdf_data = base64.b64encode(f.read()).decode("utf-8")
+                
+                return {
+                    "success": True,
+                    "pdf_data": pdf_data,
+                    "log": result.stdout,
+                    "error": None
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"PDF not generated. LaTeX errors may have occurred.",
+                    "log": result.stdout + "\n" + result.stderr,
+                    "pdf_data": None
+                }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "error": "Compilation timed out (60s limit)",
+            "log": "",
+            "pdf_data": None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "log": "",
+            "pdf_data": None
+        }
+
+
+def generate_word_document(resume_text: str, summary: str, dominant_role: str) -> bytes:
+    """
+    Generate a Word document from resume content.
+    Returns the document as bytes.
+    """
+    doc = Document()
+    
+    # Define role colors (as RGB tuples)
+    role_colors = {
+        "Builder": (59, 130, 246),     # Blue
+        "Enabler": (34, 197, 94),      # Green
+        "Thriver": (249, 115, 22),     # Orange
+        "Supportee": (139, 92, 246)    # Purple
+    }
+    
+    # Title
+    title = doc.add_heading("Resume", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # RoleColor badge
+    role_para = doc.add_paragraph()
+    role_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    role_run = role_para.add_run(f"Dominant RoleColor: {dominant_role}")
+    role_run.bold = True
+    role_run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # Spacer
+    
+    # Summary section
+    doc.add_heading("Professional Summary", level=1)
+    summary_para = doc.add_paragraph(summary)
+    summary_para.paragraph_format.space_after = Pt(12)
+    
+    doc.add_paragraph()  # Spacer
+    
+    # Parse and add the resume content
+    doc.add_heading("Experience & Details", level=1)
+    
+    # Split resume text into sections
+    lines = resume_text.strip().split("\n")
+    current_section = None
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check if it's a section header (all caps or ends with colon)
+        if line.isupper() or (len(line) < 50 and line.endswith(":")):
+            current_section = line.rstrip(":")
+            doc.add_heading(current_section, level=2)
+        elif line.startswith("-") or line.startswith("•"):
+            # Bullet point
+            doc.add_paragraph(line[1:].strip(), style="List Bullet")
+        else:
+            doc.add_paragraph(line)
+    
+    # Save to bytes
+    doc_bytes = BytesIO()
+    doc.save(doc_bytes)
+    doc_bytes.seek(0)
+    return doc_bytes.getvalue()
 
 
 def display_rolecolor_scores(scores: dict, matches: dict):
@@ -226,13 +371,16 @@ def main():
     st.title("🎨 RoleColorAI")
     st.markdown("*Transform your resume through the lens of team contribution styles*")
     
-    # Tabs for different sections
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # Tab names
+    tab_names = [
         "📝 Resume Input", 
         "📊 RoleColor Analysis", 
         "✍️ Summary Rewrite",
         "📄 LaTeX/Overleaf"
-    ])
+    ]
+    
+    # Tabs for different sections - using session state for active tab
+    tab1, tab2, tab3, tab4 = st.tabs(tab_names)
     
     # Tab 1: Resume Input
     with tab1:
@@ -333,7 +481,23 @@ B.S. Computer Science, State University, 2019"""
             if st.button("🔍 Analyze Resume", type="primary", use_container_width=True):
                 with st.spinner("Analyzing resume..."):
                     st.session_state.scores = score_resume(resume_input)
-                st.success("Analysis complete! Go to the RoleColor Analysis tab.")
+                st.success("✅ Analysis complete! Switching to RoleColor Analysis tab...")
+                # Auto-switch to RoleColor Analysis tab using JavaScript
+                st.markdown("""
+                    <script>
+                        // Find and click the RoleColor Analysis tab
+                        setTimeout(function() {
+                            const tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+                            if (tabs.length > 1) {
+                                tabs[1].click();
+                            }
+                        }, 500);
+                    </script>
+                """, unsafe_allow_html=True)
+                # Rerun to reflect changes
+                import time
+                time.sleep(0.5)
+                st.rerun()
 
     # Tab 2: RoleColor Analysis
     with tab2:
@@ -409,12 +573,18 @@ B.S. Computer Science, State University, 2019"""
                         st.session_state.rewritten_summary = summary
             
             with col2:
+                # Get the dominant role and set it as default selection
+                role_options = ["Builder", "Enabler", "Thriver", "Supportee"]
+                dominant_index = role_options.index(dominant) if dominant in role_options else 0
+                
                 target_role = st.selectbox(
-                    "Or target a specific RoleColor:",
-                    ["Auto (Dominant)", "Builder", "Enabler", "Thriver", "Supportee"]
+                    "Target a specific RoleColor:",
+                    role_options,
+                    index=dominant_index,
+                    help=f"Auto-selected based on your dominant RoleColor: {dominant}"
                 )
                 
-                if target_role != "Auto (Dominant)" and st.button("Generate for Selected"):
+                if st.button("🎯 Generate for Selected", use_container_width=True):
                     with st.spinner("AI is writing your summary..."):
                         summary = rewrite_summary(
                             resume_text=st.session_state.resume_text,
@@ -422,6 +592,7 @@ B.S. Computer Science, State University, 2019"""
                             scores=st.session_state.scores['scores']
                         )
                         st.session_state.rewritten_summary = summary
+                        st.rerun()
             
             if st.session_state.rewritten_summary:
                 st.markdown("---")
@@ -494,6 +665,7 @@ B.S. Computer Science, State University, 2019"""
                                 dominant_role=dominant
                             )
                         st.session_state.latex_code = latex
+                        st.session_state.compiled_pdf = None  # Reset PDF when new LaTeX is generated
                 
                 # Validate syntax
                 if st.session_state.latex_code:
@@ -507,36 +679,99 @@ B.S. Computer Science, State University, 2019"""
                             st.warning(f"⚠️ {warning}")
             
             with col2:
-                st.subheader("E2B Compilation")
-                st.markdown("Compile your LaTeX to PDF using E2B sandbox.")
+                st.subheader("📥 Download Options")
                 
                 if st.session_state.latex_code:
-                    if st.button("🚀 Compile to PDF", use_container_width=True):
+                    # LaTeX source download
+                    st.download_button(
+                        label="📄 Download LaTeX (.tex)",
+                        data=st.session_state.latex_code,
+                        file_name="resume.tex",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+                    
+                    # Word document download
+                    st.markdown("---")
+                    st.markdown("**Word Document:**")
+                    if st.button("📝 Generate Word Document", use_container_width=True):
+                        with st.spinner("Generating Word document..."):
+                            word_bytes = generate_word_document(
+                                resume_text=st.session_state.resume_text,
+                                summary=st.session_state.rewritten_summary,
+                                dominant_role=dominant
+                            )
+                            st.session_state.word_doc = word_bytes
+                    
+                    if 'word_doc' in st.session_state and st.session_state.word_doc:
+                        st.download_button(
+                            label="📥 Download Word (.docx)",
+                            data=st.session_state.word_doc,
+                            file_name="resume.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                else:
+                    st.info("Generate LaTeX code first")
+            
+            # PDF Compilation Section
+            st.markdown("---")
+            st.subheader("🖨️ PDF Compilation")
+            
+            if st.session_state.latex_code:
+                comp_col1, comp_col2 = st.columns(2)
+                
+                with comp_col1:
+                    st.markdown("**Option 1: Local Compilation**")
+                    st.caption("Uses pdflatex if installed on your system")
+                    
+                    if st.button("🖥️ Compile Locally", use_container_width=True):
+                        with st.spinner("Compiling LaTeX locally..."):
+                            result = compile_latex_locally(st.session_state.latex_code)
+                            
+                            if result['success']:
+                                st.success("✅ PDF compiled successfully!")
+                                st.session_state.compiled_pdf = result['pdf_data']
+                            else:
+                                st.error(f"❌ {result['error']}")
+                                if result['log']:
+                                    with st.expander("View compilation log"):
+                                        st.code(result['log'])
+                
+                with comp_col2:
+                    st.markdown("**Option 2: E2B Cloud Compilation**")
+                    st.caption("Uses E2B sandbox (requires API key)")
+                    
+                    if st.button("☁️ Compile in E2B", use_container_width=True):
                         with st.spinner("Compiling LaTeX in E2B sandbox... (this may take a minute)"):
                             result = compile_latex_in_sandbox(st.session_state.latex_code)
                             
                             if result['success']:
                                 st.success("✅ PDF compiled successfully!")
-                                
-                                # Create download button
-                                pdf_bytes = base64.b64decode(result['pdf_data'])
-                                st.download_button(
-                                    label="📥 Download PDF",
-                                    data=pdf_bytes,
-                                    file_name="resume.pdf",
-                                    mime="application/pdf"
-                                )
+                                st.session_state.compiled_pdf = result['pdf_data']
                             else:
                                 st.error(f"❌ Compilation failed: {result['error']}")
                                 if result['log']:
                                     with st.expander("View compilation log"):
                                         st.code(result['log'])
-                else:
-                    st.info("Generate LaTeX code first")
+                
+                # Show PDF download if compiled
+                if st.session_state.compiled_pdf:
+                    st.markdown("---")
+                    pdf_bytes = base64.b64decode(st.session_state.compiled_pdf)
+                    st.download_button(
+                        label="📥 Download PDF",
+                        data=pdf_bytes,
+                        file_name="resume.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary"
+                    )
+                    st.success("✅ Your PDF is ready for download!")
             
             # LaTeX Editor
             st.markdown("---")
-            st.subheader("LaTeX Editor")
+            st.subheader("✏️ LaTeX Editor")
             
             if st.session_state.latex_code:
                 # AI modification input
@@ -545,13 +780,14 @@ B.S. Computer Science, State University, 2019"""
                     placeholder="e.g., Add a projects section, Change the color scheme, Make margins wider..."
                 )
                 
-                if latex_modification and st.button("Apply AI Modification"):
+                if latex_modification and st.button("🤖 Apply AI Modification"):
                     with st.spinner("Modifying LaTeX..."):
                         new_latex = edit_latex_with_ai(
                             st.session_state.latex_code,
                             latex_modification
                         )
                         st.session_state.latex_code = new_latex
+                        st.session_state.compiled_pdf = None  # Reset PDF after modification
                         st.rerun()
                 
                 # Code editor
@@ -563,17 +799,10 @@ B.S. Computer Science, State University, 2019"""
                 
                 if edited_latex != st.session_state.latex_code:
                     st.session_state.latex_code = edited_latex
+                    st.session_state.compiled_pdf = None  # Reset PDF after edit
                 
-                # Download LaTeX source
-                st.download_button(
-                    label="📥 Download .tex file",
-                    data=st.session_state.latex_code,
-                    file_name="resume.tex",
-                    mime="text/plain"
-                )
-                
-                # Copy to clipboard instruction
-                st.info("💡 **Tip:** Copy the LaTeX code above and paste it into [Overleaf](https://www.overleaf.com/) for online editing and compilation.")
+                # Overleaf tip
+                st.info("💡 **Tip:** Copy the LaTeX code above and paste it into [Overleaf](https://www.overleaf.com/) for online editing and compilation if local/E2B compilation doesn't work.")
         else:
             st.info("👈 Complete the analysis and generate a summary first")
 
