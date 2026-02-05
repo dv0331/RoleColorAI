@@ -3,6 +3,8 @@ E2B Sandbox Runner Module
 
 This module provides functionality to compile LaTeX code
 using the E2B sandbox environment.
+
+Updated for E2B SDK v2.x
 """
 
 import os
@@ -46,20 +48,24 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
         }
     
     api_key = get_e2b_api_key()
+    sandbox = None
     
     try:
-        # Create sandbox with Ubuntu template
-        sandbox = Sandbox(api_key=api_key)
+        # Create sandbox using E2B SDK v2.x class method
+        # Sandbox.create() is the recommended way in v2.x
+        # If template is not specified, it defaults to 'base'
+        sandbox = Sandbox.create(api_key=api_key, timeout=300)
         
         # Write LaTeX file
         tex_path = f"/home/user/{filename}.tex"
-        sandbox.filesystem.write(tex_path, latex_code)
+        sandbox.files.write(tex_path, latex_code)
         
         # Install LaTeX (texlive-latex-base for basic, texlive-full for complete)
         # Using a minimal install for speed
-        install_result = sandbox.process.start_and_wait(
-            "apt-get update && apt-get install -y texlive-latex-base texlive-fonts-recommended texlive-latex-extra",
-            timeout=120
+        # Note: sudo is required in E2B sandbox for package installation
+        install_result = sandbox.commands.run(
+            "sudo apt-get update && sudo apt-get install -y texlive-latex-base texlive-fonts-recommended texlive-latex-extra",
+            timeout=180
         )
         
         if install_result.exit_code != 0:
@@ -71,16 +77,14 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
         
         # Compile LaTeX to PDF
         compile_cmd = f"cd /home/user && pdflatex -interaction=nonstopmode {filename}.tex"
-        compile_result = sandbox.process.start_and_wait(compile_cmd, timeout=60)
+        compile_result = sandbox.commands.run(compile_cmd, timeout=60)
         
         # Check for PDF
         pdf_path = f"/home/user/{filename}.pdf"
         
         try:
-            pdf_content = sandbox.filesystem.read_bytes(pdf_path)
+            pdf_content = sandbox.files.read(pdf_path, format="bytes")
             pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
-            
-            sandbox.close()
             
             return {
                 "success": True,
@@ -89,7 +93,6 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
                 "error": None
             }
         except Exception as e:
-            sandbox.close()
             return {
                 "success": False,
                 "error": f"PDF not generated. LaTeX errors: {compile_result.stderr}",
@@ -97,11 +100,33 @@ def compile_latex_in_sandbox(latex_code: str, filename: str = "resume") -> Dict:
             }
             
     except Exception as e:
+        error_msg = str(e)
+        original_error = error_msg  # Keep original for debugging
+        
+        # Provide more helpful error messages for common issues
+        if "WebSocket" in error_msg or "connection" in error_msg.lower():
+            error_msg = f"Connection error: {original_error}. This may be a temporary E2B service issue. Please try again in a moment."
+        elif "api_key" in error_msg.lower() or "unauthorized" in error_msg.lower() or "401" in error_msg:
+            error_msg = f"API key error: Please verify your E2B_API_KEY is correct and active. (Details: {original_error})"
+        elif "404" in error_msg or "not found" in error_msg.lower():
+            error_msg = f"Template not found. The 'base' template may not be available. (Details: {original_error})"
+        elif "template" in error_msg.lower():
+            error_msg = f"Template error: {original_error}"
+        else:
+            error_msg = f"E2B Error: {original_error}"
+        
         return {
             "success": False,
-            "error": str(e),
+            "error": error_msg,
             "log": ""
         }
+    finally:
+        # Always clean up the sandbox
+        if sandbox:
+            try:
+                sandbox.kill()
+            except:
+                pass
 
 
 def compile_latex_simple(latex_code: str) -> Tuple[bool, str, str]:
