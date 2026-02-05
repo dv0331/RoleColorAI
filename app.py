@@ -31,7 +31,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from rolecolor_framework import ROLECOLOR_KEYWORDS, get_rolecolor_descriptions
 from resume_scorer import score_resume, format_score_output, get_score_summary
 from resume_rewriter import rewrite_summary, enhance_with_chat
-from latex_generator import generate_latex_from_resume, generate_simple_latex, edit_latex_with_ai, validate_latex_syntax
+from latex_generator import generate_latex_from_resume, generate_simple_latex, edit_latex_with_ai, validate_latex_syntax, generate_tailored_resume_latex
 from e2b_runner import compile_latex_in_sandbox, validate_latex_syntax as validate_latex
 from chat_assistant import ChatAssistant
 
@@ -96,6 +96,14 @@ if 'compiled_pdf' not in st.session_state:
     st.session_state.compiled_pdf = None
 if 'word_doc' not in st.session_state:
     st.session_state.word_doc = None
+if 'job_description' not in st.session_state:
+    st.session_state.job_description = ""
+if 'tailored_latex' not in st.session_state:
+    st.session_state.tailored_latex = ""
+if 'tailored_pdf' not in st.session_state:
+    st.session_state.tailored_pdf = None
+if 'tailored_word' not in st.session_state:
+    st.session_state.tailored_word = None
 
 
 def extract_text_from_pdf(pdf_file) -> str:
@@ -376,11 +384,12 @@ def main():
         "📝 Resume Input", 
         "📊 RoleColor Analysis", 
         "✍️ Summary Rewrite",
-        "📄 LaTeX/Overleaf"
+        "📄 LaTeX/Overleaf",
+        "🎯 Job Tailoring"
     ]
     
     # Tabs for different sections - using session state for active tab
-    tab1, tab2, tab3, tab4 = st.tabs(tab_names)
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
     
     # Tab 1: Resume Input
     with tab1:
@@ -805,6 +814,198 @@ B.S. Computer Science, State University, 2019"""
                 st.info("💡 **Tip:** Copy the LaTeX code above and paste it into [Overleaf](https://www.overleaf.com/) for online editing and compilation if local/E2B compilation doesn't work.")
         else:
             st.info("👈 Complete the analysis and generate a summary first")
+
+    # Tab 5: Job Tailoring
+    with tab5:
+        st.header("🎯 Job-Tailored Resume Generator")
+        st.markdown("*Generate a resume tailored specifically to a job description*")
+        
+        if st.session_state.resume_text:
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.subheader("📋 Job Description")
+                job_desc_input = st.text_area(
+                    "Paste the job description here:",
+                    value=st.session_state.job_description,
+                    height=300,
+                    placeholder="Paste the full job posting here...\n\nExample:\nSenior Software Engineer\nWe are looking for an experienced developer..."
+                )
+                
+                if job_desc_input != st.session_state.job_description:
+                    st.session_state.job_description = job_desc_input
+                
+                # Get dominant role for styling (if analysis done)
+                dominant_role = "Builder"  # Default
+                if st.session_state.scores:
+                    dominant_role = st.session_state.scores['dominant_role']
+                
+                st.markdown("---")
+                st.markdown("**Resume Style:**")
+                style_role = st.selectbox(
+                    "Color accent based on RoleColor:",
+                    ["Builder", "Enabler", "Thriver", "Supportee"],
+                    index=["Builder", "Enabler", "Thriver", "Supportee"].index(dominant_role),
+                    help="This affects the color scheme of your tailored resume"
+                )
+            
+            with col2:
+                st.subheader("📄 Your Current Resume")
+                st.text_area(
+                    "Resume preview:",
+                    value=st.session_state.resume_text[:1500] + "..." if len(st.session_state.resume_text) > 1500 else st.session_state.resume_text,
+                    height=300,
+                    disabled=True
+                )
+            
+            # Generate button
+            st.markdown("---")
+            if st.button("✨ Generate Tailored Resume", type="primary", use_container_width=True):
+                if not st.session_state.job_description.strip():
+                    st.error("⚠️ Please paste a job description first!")
+                else:
+                    with st.spinner("🤖 AI is analyzing the job and tailoring your resume... This may take a moment."):
+                        tailored = generate_tailored_resume_latex(
+                            resume_text=st.session_state.resume_text,
+                            job_description=st.session_state.job_description,
+                            dominant_role=style_role
+                        )
+                        st.session_state.tailored_latex = tailored
+                        st.session_state.tailored_pdf = None  # Reset compiled PDF
+                        st.session_state.tailored_word = None  # Reset Word doc
+                    st.success("✅ Tailored resume generated!")
+                    st.rerun()
+            
+            # Show generated LaTeX and options
+            if st.session_state.tailored_latex:
+                st.markdown("---")
+                st.subheader("📝 Generated Tailored Resume")
+                
+                # Validation
+                validation = validate_latex(st.session_state.tailored_latex)
+                if validation['valid']:
+                    st.success("✅ LaTeX syntax is valid")
+                else:
+                    for error in validation['errors']:
+                        st.warning(f"⚠️ {error}")
+                
+                # Options columns
+                opt_col1, opt_col2, opt_col3 = st.columns(3)
+                
+                with opt_col1:
+                    st.markdown("**📥 Download Options**")
+                    st.download_button(
+                        label="📄 Download LaTeX (.tex)",
+                        data=st.session_state.tailored_latex,
+                        file_name="tailored_resume.tex",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
+                    
+                    # Word document generation
+                    if st.button("📝 Generate Word Doc", key="gen_tailored_word", use_container_width=True):
+                        with st.spinner("Generating Word document..."):
+                            # Extract a summary from the tailored resume for the Word doc
+                            summary = "Professional with experience aligned to your target role."
+                            if st.session_state.rewritten_summary:
+                                summary = st.session_state.rewritten_summary
+                            
+                            word_bytes = generate_word_document(
+                                resume_text=st.session_state.resume_text,
+                                summary=summary,
+                                dominant_role=style_role
+                            )
+                            st.session_state.tailored_word = word_bytes
+                    
+                    if st.session_state.tailored_word:
+                        st.download_button(
+                            label="📥 Download Word (.docx)",
+                            data=st.session_state.tailored_word,
+                            file_name="tailored_resume.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                
+                with opt_col2:
+                    st.markdown("**🖨️ Local Compilation**")
+                    if st.button("🖥️ Compile Locally", key="local_tailored", use_container_width=True):
+                        with st.spinner("Compiling LaTeX locally..."):
+                            result = compile_latex_locally(st.session_state.tailored_latex)
+                            
+                            if result['success']:
+                                st.success("✅ PDF compiled!")
+                                st.session_state.tailored_pdf = result['pdf_data']
+                            else:
+                                st.error(f"❌ {result['error']}")
+                
+                with opt_col3:
+                    st.markdown("**☁️ E2B Compilation**")
+                    if st.button("☁️ Compile in E2B", key="e2b_tailored", use_container_width=True):
+                        with st.spinner("Compiling in E2B sandbox..."):
+                            result = compile_latex_in_sandbox(st.session_state.tailored_latex)
+                            
+                            if result['success']:
+                                st.success("✅ PDF compiled!")
+                                st.session_state.tailored_pdf = result['pdf_data']
+                            else:
+                                st.error(f"❌ {result['error']}")
+                
+                # PDF download (if compiled)
+                if st.session_state.tailored_pdf:
+                    st.markdown("---")
+                    pdf_bytes = base64.b64decode(st.session_state.tailored_pdf)
+                    st.download_button(
+                        label="📥 Download Tailored PDF",
+                        data=pdf_bytes,
+                        file_name="tailored_resume.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary"
+                    )
+                    st.success("🎉 Your tailored PDF is ready!")
+                
+                # LaTeX editor
+                st.markdown("---")
+                st.subheader("✏️ Edit Tailored LaTeX")
+                
+                edit_request = st.text_input(
+                    "Ask AI to modify:",
+                    placeholder="e.g., Emphasize leadership more, Add a projects section, Make it more concise...",
+                    key="tailored_edit_request"
+                )
+                
+                if edit_request and st.button("🤖 Apply Modification", key="apply_tailored_edit"):
+                    with st.spinner("Modifying LaTeX..."):
+                        new_latex = edit_latex_with_ai(
+                            st.session_state.tailored_latex,
+                            edit_request
+                        )
+                        st.session_state.tailored_latex = new_latex
+                        st.session_state.tailored_pdf = None
+                        st.rerun()
+                
+                # Manual editor
+                edited_tailored = st.text_area(
+                    "Edit LaTeX directly:",
+                    value=st.session_state.tailored_latex,
+                    height=400,
+                    key="tailored_latex_editor"
+                )
+                
+                if edited_tailored != st.session_state.tailored_latex:
+                    st.session_state.tailored_latex = edited_tailored
+                    st.session_state.tailored_pdf = None
+                
+                st.info("💡 **Tip:** Copy this LaTeX into [Overleaf](https://www.overleaf.com/) for online editing!")
+        else:
+            st.info("👈 Please enter your resume in the **Resume Input** tab first to use Job Tailoring.")
+            st.markdown("""
+            ### How to use Job Tailoring:
+            1. **Go to Resume Input tab** and paste or upload your resume
+            2. **Come back here** and paste the target job description
+            3. **Click Generate** to create a tailored resume
+            4. **Download** as LaTeX, PDF, or Word document
+            """)
 
     # Footer
     st.markdown("---")

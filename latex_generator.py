@@ -341,6 +341,105 @@ def validate_latex_syntax(latex_code: str) -> tuple[bool, list[str]]:
     return (len(issues) == 0, issues)
 
 
+def generate_tailored_resume_latex(
+    resume_text: str,
+    job_description: str,
+    dominant_role: str = "Builder",
+    model: str = "gpt-4o-mini"
+) -> str:
+    """
+    Generate a tailored LaTeX resume based on the job description.
+    
+    Args:
+        resume_text: Original resume text
+        job_description: Target job description to tailor the resume for
+        dominant_role: Dominant RoleColor for styling
+        model: OpenAI model to use
+    
+    Returns:
+        Complete LaTeX code for a tailored resume
+    """
+    client = get_openai_client()
+    
+    role_colors = {
+        "Builder": ("BuilderColor", "59, 130, 246"),
+        "Enabler": ("EnablerColor", "34, 197, 94"),
+        "Thriver": ("ThriverColor", "249, 115, 22"),
+        "Supportee": ("SupporteeColor", "139, 92, 246")
+    }
+    
+    color_name, rgb = role_colors.get(dominant_role, ("BuilderColor", "59, 130, 246"))
+    
+    system_prompt = """You are an expert resume writer and LaTeX developer. Your job is to create a tailored, ATS-friendly resume in LaTeX format that aligns the candidate's experience with a specific job description.
+
+CRITICAL RULES:
+1. Return ONLY complete, compilable LaTeX code - no explanations
+2. Highlight experiences, skills, and achievements most relevant to the job description
+3. Use keywords from the job description naturally in the resume
+4. Rewrite bullet points to emphasize relevant accomplishments
+5. Maintain truthfulness - don't fabricate experience, just emphasize what's relevant
+6. Use professional formatting with clean sections
+7. The LaTeX must be compilable with pdflatex
+8. Escape special LaTeX characters: & % $ # _ { }
+9. Keep the resume to 1 page if possible"""
+
+    user_prompt = f"""Create a tailored LaTeX resume for this candidate based on the job description.
+
+ORIGINAL RESUME:
+{resume_text}
+
+TARGET JOB DESCRIPTION:
+{job_description}
+
+Use this LaTeX template structure and return COMPLETE code:
+- Use \\documentclass[11pt,a4paper]{{article}}
+- Include packages: inputenc, fontenc, geometry, enumitem, titlesec, hyperref, xcolor
+- Use color: \\definecolor{{{color_name}}}{{RGB}}{{{rgb}}}
+- Set margins: 0.75in all around
+- Format sections with the color accent
+- Include: Header (name, contact), Professional Summary, Experience, Skills, Education
+
+Return ONLY the complete LaTeX code, nothing else."""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.5,
+            max_tokens=3000
+        )
+        result = response.choices[0].message.content.strip()
+        
+        # Clean up response (remove markdown code blocks if present)
+        if result.startswith('```'):
+            lines = result.split('\n')
+            # Remove first line (```latex or ```)
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            # Remove last line if it's just ```
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            result = '\n'.join(lines)
+        
+        # Validate it has basic LaTeX structure
+        if '\\documentclass' not in result or '\\begin{document}' not in result:
+            # Return a fallback template with error message
+            return generate_latex_from_resume(
+                resume_text=resume_text,
+                rewritten_summary=f"Tailored professional seeking position aligned with job requirements.",
+                dominant_role=dominant_role,
+                scores={}
+            )
+        
+        return result
+        
+    except Exception as e:
+        return f"% Error generating tailored resume: {str(e)}\n% Please try again or generate manually."
+
+
 def edit_latex_with_ai(
     current_latex: str,
     user_request: str,
